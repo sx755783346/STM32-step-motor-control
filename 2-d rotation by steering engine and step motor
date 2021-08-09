@@ -1,0 +1,143 @@
+//main.c
+#include "stm32f10x.h"
+#include "time.h"
+#include "sys.h"
+#include "usart.h"
+#include "delay.h"
+#include "led.h"
+
+//step motor initialization
+//P1: motor control pin			        pul+
+//P2: motor control pin			        pul-
+//P3: motor drive direction pin			dir+
+//P4: motor drive direction pin   	dir-
+//P5: GPIO selection			     			GPIOX
+//P6: motor drive direction         dir
+//P7: motor speed                   speed
+
+//Example:
+//driverStepper(GPIO_Pin_0,GPIO_Pin_1,GPIO_Pin_2,GPIO_Pin_3, GPIOA,1,100);
+void driverStepper(uint16_t pul_Pos, uint16_t pul_Neg, uint16_t dir_Pos, uint16_t dir_Neg, GPIO_TypeDef* GPIOX, int dir, int speed);
+
+//step motor initialization
+//P1: motor control pin			    pul+
+//P2: motor control pin			    pul-
+//P3: motor drive direction			dir+
+//P4: motor drive direction			dir-
+//P5: GPIO selection			      GPIOX
+
+//Example:
+//initStepper(GPIO_Pin_0,GPIO_Pin_1,GPIO_Pin_2,GPIO_Pin_3,RCC_APB2Periph_GPIOA);
+void initStepper(uint16_t pul_Pos, uint16_t pul_Neg, uint16_t dir_Pos, uint16_t dir_Neg, uint32_t RCC_APB2Periph_GPIOX);
+
+//PWM initialization for steering engine
+//P1: set period
+//P2: set scaler
+//Example:
+//TIM4_PWM_Init(199,7199)
+void TIM4_PWM_Init(u16 arr,u16 psc);
+
+
+#define pul_P GPIO_Pin_6
+#define pul_N GPIO_Pin_7
+#define dir_P GPIO_Pin_8
+#define dir_N GPIO_Pin_9
+
+int main(void)
+{
+	// initialization
+	int pulse_Count;
+	int orient = 190;
+	delay_init();
+	TIM4_PWM_Init(199,7199);
+
+	
+	
+	// main loop
+  while (1)
+ {
+	 LED0=0; //light up LED
+	 pulse_Count = 0; //Pulse count
+	 uart_init(115200);	
+	 int i;
+	 int j;
+	 TIM_SetCompare4(TIM4,orient);
+	 delay_ms(1000);
+	 initStepper(pul_P, pul_N, dir_P, dir_N, RCC_APB2Periph_GPIOC);
+	 
+	 // step 1
+	 while (orient >= 185 && orient < 195){
+		 // motor rotation
+		 pulse_Count = 0;
+		 while	(pulse_Count < 4000){
+			 driverStepper(pul_P, pul_N, dir_P, dir_N, GPIOC,1,2);		
+			 pulse_Count++;
+			 printf("Forward pulse\t%d\n",pulse_Count);}
+		 // steer engine rotation
+		 TIM_SetCompare4(TIM4,orient);	
+		 //printf("steer orientation:\t%d\n",orient);			 
+		 orient ++;
+	 }
+
+	 //printf("out%d",orient);
+	 
+	 // step 2
+	 while (orient > 185 && orient <= 195){
+		 pulse_Count = 0;
+		 // motor rotation
+		 while	(pulse_Count < 4000){
+			 driverStepper(pul_P, pul_N, dir_P, dir_N, GPIOC,1,2);		
+			 pulse_Count++;
+			 printf("Forward pulse\t%d\n",pulse_Count);}
+		 // steer engine rotation
+		 TIM_SetCompare4(TIM4,orient);
+		 //printf("steer orientation:\t%d\n",orient);	
+		 orient --;
+	 }
+		
+ }
+ 
+}
+
+void initStepper(uint16_t pul_Pos, uint16_t pul_Neg, uint16_t dir_Pos, uint16_t dir_Neg,uint32_t RCC_APB2Periph_GPIOX){
+	//GPIO structure pointer
+	GPIO_InitTypeDef  GPIO_InitStructure;
+	//GPIO clock enable
+ 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOX, ENABLE);
+	//Define the GPIO pin
+	GPIO_InitStructure.GPIO_Pin = pul_Pos|pul_Neg|dir_Pos|dir_Neg;
+	//Define output mode
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	//Define GPIO speed
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	//Initialize each pin
+	if(RCC_APB2Periph_GPIOX == RCC_APB2Periph_GPIOA)  			{GPIO_Init(GPIOA, &GPIO_InitStructure);GPIO_ResetBits(GPIOA,pul_Pos);GPIO_ResetBits(GPIOA,pul_Neg);GPIO_ResetBits(GPIOA,dir_Pos);GPIO_ResetBits(GPIOA,dir_Neg);}
+	else if(RCC_APB2Periph_GPIOX == RCC_APB2Periph_GPIOB)		{GPIO_Init(GPIOB, &GPIO_InitStructure);GPIO_ResetBits(GPIOB,pul_Pos);GPIO_ResetBits(GPIOB,pul_Neg);GPIO_ResetBits(GPIOB,dir_Pos);GPIO_ResetBits(GPIOB,dir_Neg);}
+	else if(RCC_APB2Periph_GPIOX == RCC_APB2Periph_GPIOC)		{GPIO_Init(GPIOC, &GPIO_InitStructure);GPIO_ResetBits(GPIOC,pul_Pos);GPIO_ResetBits(GPIOC,pul_Neg);GPIO_ResetBits(GPIOC,dir_Pos);GPIO_ResetBits(GPIOC,dir_Neg);}
+}
+
+void driverStepper(uint16_t pul_Pos, uint16_t pul_Neg, uint16_t dir_Pos, uint16_t dir_Neg, GPIO_TypeDef* GPIOX, int dir, int speed){
+	if(dir == 1){
+		GPIO_SetBits(GPIOX,dir_Pos);
+		GPIO_ResetBits(GPIOX,dir_Neg);
+			GPIO_SetBits(GPIOX,pul_Pos);
+			GPIO_ResetBits(GPIOX,pul_Neg);	
+			delay_ms(speed);
+			GPIO_ResetBits(GPIOX,pul_Pos);				
+			delay_ms(speed);				
+	}
+	else if(dir == 0){
+		GPIO_ResetBits(GPIOX,dir_Pos);
+		GPIO_SetBits(GPIOX,dir_Neg);
+			GPIO_SetBits(GPIOX,pul_Pos);
+			GPIO_ResetBits(GPIOX,pul_Neg);	
+			delay_ms(speed);
+			GPIO_ResetBits(GPIOX,pul_Pos);				
+			delay_ms(speed);			
+			
+	}
+	else{
+		return;
+	}
+}
+
